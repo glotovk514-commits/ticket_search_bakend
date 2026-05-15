@@ -24,6 +24,7 @@ from pathlib import Path
 from gigachat import GigaChat
 import sys
 import bcrypt
+from concurrent.futures import ThreadPoolExecutor
 
 BASE_DIR = Path(__file__).resolve().parent
 
