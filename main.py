@@ -39,7 +39,7 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 from contextlib import asynccontextmanager
-
+executor = ThreadPoolExecutor(max_workers=2)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global db_pool
@@ -431,22 +431,29 @@ def send_email(data: BookingData):
 @app.post("/get-wagons")
 async def api_get_wagons(request: WagonRequest):
     try:
-        data = await asyncio.to_thread(
+        # Запускаем синхронную функцию в отдельном потоке, чтобы не блокировать основной цикл
+        loop = asyncio.get_event_loop()
+        data = await loop.run_in_executor(
+            executor,
             get_ufs_data,
-            request.from_city, 
-            request.to_city, 
-            request.date, 
+            request.from_city,
+            request.to_city,
+            request.date,
             request.type,
             request.target_time
         )
         
         if data is None:
-            raise HTTPException(status_code=404, detail=f"Категория {request.type} не найдена")
+            raise HTTPException(status_code=404, detail=f"Категория {request.type} не найдена на этом поезде")
             
         return {"status": "success", "data": data}
     except Exception as e:
-        print(f"Error in /get-wagons: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Логируем полную ошибку для отладки
+        print(f"Критическая ошибка в /get-wagons: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+        # Возвращаем понятное сообщение
+        raise HTTPException(status_code=500, detail=f"Ошибка парсинга: {str(e)}")
 
 @app.post("/register")
 async def register(user: UserRegister):
