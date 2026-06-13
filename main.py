@@ -129,6 +129,8 @@ class BookingData(BaseModel):
     departure_date: str
     train_number: str
     carriage_type: str
+    carriage_number: str
+    seat_number: str
     price: float
     email: Optional[str] = None
     passenger_fio: Optional[str] = None
@@ -765,10 +767,10 @@ async def send_ticket_endpoint(data: BookingData):
             valid_date = datetime.strptime(str(data.departure_date), "%Y-%m-%d").date()
             await conn.execute(
                 """INSERT INTO tickets 
-                   (user_id, destination, departure_date, train_number, carriage_type, price)
-                   VALUES ($1, $2, $3, $4, $5, $6)""",
-                data.user_id, data.route, valid_date, 
-                data.train_number, data.carriage_type, data.price
+                   (user_id, destination, departure_date, train_number, carriage_type, carriage_number, seat_number, price)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                data.user_id, data.route, valid_date,  
+                data.train_number, data.carriage_type, data.carriage_number, data.seat_number, data.price
             )
             return {"status": "success"}
         except Exception as e:
