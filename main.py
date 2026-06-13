@@ -95,17 +95,8 @@ giga_client = GigaChat(
 )
 
 # ==================== Pydantic модели ====================
-class YandexUserInfo(BaseModel):
-    id: str
-    login: str
-    client_id: str
-    display_name: str
-    real_name: str
-    first_name: str
-    last_name: str
-    sex: str
-    default_email: str
-    emails: List[str]
+class YandexAuthRequest(BaseModel):
+    token: str
     
 class GoogleToken(BaseModel):
     token: str
