@@ -25,6 +25,10 @@ from gigachat import GigaChat
 import sys
 import bcrypt
 from concurrent.futures import ThreadPoolExecutor
+import secrets
+from fastapi import Request, Depends
+from fastapi.responses import RedirectResponse
+import httpx
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -91,7 +95,18 @@ giga_client = GigaChat(
 )
 
 # ==================== Pydantic модели ====================
-
+class YandexUserInfo(BaseModel):
+    id: str
+    login: str
+    client_id: str
+    display_name: str
+    real_name: str
+    first_name: str
+    last_name: str
+    sex: str
+    default_email: str
+    emails: List[str]
+    
 class GoogleToken(BaseModel):
     token: str
 
@@ -768,6 +783,24 @@ async def send_ticket_endpoint(data: BookingData):
         except Exception as e:
             print(f"Ошибка сохранения билета: {e}")
             raise HTTPException(status_code=500, detail="Ошибка сохранения билета в базу")
+
+
+@app.get("/auth/yandex/login")
+async def yandex_login():
+    """Редирект на страницу авторизации Яндекса"""
+    # Создаем state для защиты от CSRF
+    state = secrets.token_urlsafe(32)
+    
+    params = {
+        "client_id": CLIENT_ID,
+        "redirect_uri": "http://localhost:8000/auth/yandex/callback",
+        "response_type": "code",
+        "state": state
+    }
+    
+    auth_url = "https://oauth.yandex.ru/authorize?" + "&".join([f"{k}={v}" for k, v in params.items()])
+    return RedirectResponse(url=auth_url)
+
 
 @app.post("/auth/google")
 async def auth_google(data: GoogleToken):
