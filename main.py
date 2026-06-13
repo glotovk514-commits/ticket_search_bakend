@@ -785,22 +785,74 @@ async def send_ticket_endpoint(data: BookingData):
             raise HTTPException(status_code=500, detail="Ошибка сохранения билета в базу")
 
 
-@app.get("/auth/yandex/login")
-async def yandex_login():
-    """Редирект на страницу авторизации Яндекса"""
-    # Создаем state для защиты от CSRF
-    state = secrets.token_urlsafe(32)
+@app.post("/auth/yandex/callback")
+async def yandex_callback(data: YandexAuthRequest):
+    # 1. Проверяем доступность глобального пула БД
     
-    params = {
-        "client_id": CLIENT_ID,
-        "redirect_uri": "http://localhost:8000/auth/yandex/callback",
-        "response_type": "code",
-        "state": state
-    }
-    
-    auth_url = "https://oauth.yandex.ru/authorize?" + "&".join([f"{k}={v}" for k, v in params.items()])
-    return RedirectResponse(url=auth_url)
+    if not db_pool:
+        raise HTTPException(status_code=503, detail="База данных недоступна")
+        
+    access_token = data.token
+    if not access_token:
+        raise HTTPException(status_code=400, detail="Токен от Яндекса не передан")
 
+    # 2. Запрашиваем данные профиля из Яндекса по полученному токену
+    async with httpx.AsyncClient() as client:
+        user_info_response = await client.get(
+            "https://login.yandex.ru/info?format=json",
+            headers={"Authorization": f"OAuth {access_token}"}
+        )
+        
+        if user_info_response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Не удалось получить данные профиля из Яндекса")
+
+        yandex_user = user_info_response.json()
+
+    # Извлекаем нужные поля
+    email = yandex_user.get("default_email")
+    name = yandex_user.get("first_name", "Имя")
+    last_name = yandex_user.get("last_name", "Фамилия")
+
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Яндекс не передал email пользователя. Проверьте настройки прав приложения.")
+
+    # 3. Работаем с БД через глобальный db_pool
+    async with db_pool.acquire() as conn:
+        try:
+            # Проверяем, существует ли пользователь в вашей таблице
+            row = await conn.fetchrow(
+                "SELECT id, name, last_name, email, role FROM users_ticket WHERE email = $1", 
+                email
+            )
+            
+            if not row:
+                # Если пользователя нет — регистрируем его автоматически
+                row = await conn.fetchrow(
+                    "INSERT INTO users_ticket (name, last_name, email, password, role) "
+                    "VALUES ($1, $2, $3, $4, $5) RETURNING id, name, last_name, email, role",
+                    name, last_name, email, "yandex_auth_user", "user"
+                )
+                is_new_user = True
+            else:
+                is_new_user = False
+                
+            # Возвращаем успешный ответ фронтенду в ожидаемом им формате
+            return {
+                "status": "success",
+                "is_new_user": is_new_user,
+                "user": {
+                    "id": row["id"],
+                    "name": row["name"],
+                    "last_name": row["last_name"],
+                    "email": row["email"],
+                    "role": row["role"]
+                }
+            }
+            
+        except Exception as e:
+            print(f"Yandex auth DB error: {e}")
+            raise HTTPException(status_code=500, detail="Ошибка базы данных при авторизации через Яндекс")
 
 @app.post("/auth/google")
 async def auth_google(data: GoogleToken):
