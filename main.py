@@ -129,8 +129,8 @@ class BookingData(BaseModel):
     departure_date: str
     train_number: str
     carriage_type: str
-    carriage_number: str
-    seat_number: str
+    carriage_number: int  # ← изменили с str на int
+    seat_number: int       # ← изменили с str на int
     price: float
     email: Optional[str] = None
     passenger_fio: Optional[str] = None
